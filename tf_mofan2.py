@@ -6,18 +6,25 @@
 # @Software: PyCharm
 
 import tensorflow as tf
+import numpy as np
+
 """ 
 为了在TensorBoard中展示节点名称，设计网络时会常使用tf.name_scope限制命名空间， 
 在这个with下所有的节点都会自动命名为input/xxx这样的格式。 
 """
-def add_layer(inputs, in_size, out_size,activation_function=None):
+def add_layer(inputs, in_size, out_size,n_layer, activation_function=None):
     # add one more layer and return the output of this layer
-    with tf.name_scope('layer'):
+    layer_name='layer%s'% n_layer
+    with tf.name_scope('layer_name'):
         with tf.name_scope('weights'):
             Weights=tf.Variable(tf.random_normal([in_size,out_size]),name='W')
+            tf.summary.histogram(layer_name+'/weights',Weights)
+
+
 
         with tf.name_scope('biases'):
             biases=tf.Variable(tf.zeros([1,out_size])+0.1,name='b')
+            tf.summary.histogram(layer_name+'/biases',biases)
 
         with tf.name_scope('Wx_plus_b'):
             Wx_plus_b=tf.matmul(inputs,Weights)+biases
@@ -25,7 +32,14 @@ def add_layer(inputs, in_size, out_size,activation_function=None):
             outputs=Wx_plus_b
         else:
             outputs=activation_function(Wx_plus_b)
+            tf.summary.histogram(layer_name + '/outputs', outputs)
         return outputs
+
+
+# Make up some real data
+x_data=np.linspace(-1,1,300)[:,np.newaxis]
+noise=np.random.normal(0,0.05,x_data.shape)
+y_data=np.square(x_data)-0.5+noise
 
 # define palceholder for inputs to network
 with tf.name_scope('inputs'):
@@ -35,21 +49,23 @@ with tf.name_scope('inputs'):
 
 
 #hiden layer1
-l1=add_layer(xs,1,10,activation_function=tf.nn.relu)
+l1=add_layer(xs,1,10,n_layer=1,activation_function=tf.nn.relu)
 
 # output layer
-prediction=add_layer(l1,10,1,activation_function=None)
+prediction=add_layer(l1,10,1,n_layer=2,activation_function=None)
 
 # the error between prediction and real data
 with tf.name_scope('loss'):
     # reduction_indices=[1]：按行求和
     loss= tf.reduce_mean(tf.reduce_sum(tf.square(ys-prediction),reduction_indices=[1]))
+    tf.summary.scalar('loss',loss)
 
 with tf.name_scope('train'):
     train_step=tf.train.GradientDescentOptimizer(0.1).minimize(loss)
 
 init=tf.global_variables_initializer()
 sess=tf.Session()
+merged=tf.summary.merge_all()
 writer=tf.summary.FileWriter('logs/',sess.graph)
 
 sess.run(init)
@@ -57,3 +73,10 @@ sess.run(init)
 jjdemacbook-pro:tf_mofan2 jj$ tensorboard --logdir='/Users/jj/Virtualenv/tensorflow-env/tf_mofan2/logs'
 使用了完整路径
 '''
+
+for i in range(1000):
+    sess.run(train_step,feed_dict={xs:x_data,ys:y_data})
+    if i%50==0:
+        result=sess.run(merged,feed_dict={xs:x_data,ys:y_data})
+        writer.add_summary(result,i)
+
